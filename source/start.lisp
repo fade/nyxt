@@ -280,7 +280,19 @@ To change the default buffer, e.g. set it to a given URL:
   (make-startup-function
    :buffer-fn (lambda () (make-buffer :url \"https://example.org\")))"
   (lambda (&optional urls)
-    (let ((window (window-make *browser*)))
+    (let ((window (window-make *browser*))
+          (buffer (current-buffer)))
+      ;; Restore session before opening command line URLs, otherwise it will
+      ;; reset the session with the new URLs.
+      (when (and (expand-path (history-path buffer))
+                 (session-list buffer))
+        (match (session-restore-prompt *browser*)
+          ;; Need `funcall-safely' so we continue if the user exits the
+          ;; minibuffer (which raises a condition).
+          (:always-ask (funcall-safely #'restore-session-by-name))
+          (:always-restore (funcall-safely #'restore (data-profile buffer)
+                                           (history-path buffer) :restore-session-p t))
+          (:never-restore (log:info "Not restoring session."))))
       (if urls
           (open-urls urls)
           (window-set-active-buffer window (funcall-safely buffer-fn))))
